@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "playable-kit"
+version = "0.1.0"
+description = "Unpack, re-skin, repack and convert PixiJS/webpack playable ads (AppLovin MRAID -> Mintegral)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["Pillow>=9.1"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+playable-kit = "playable_kit.cli:main"
+
+[tool.setuptools]
+packages = ["playable_kit"]
+
+[tool.setuptools.package-data]
+playable_kit = ["smoke_test.mjs"]
