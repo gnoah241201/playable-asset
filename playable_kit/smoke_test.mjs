@@ -80,8 +80,14 @@ await sleep(seconds * 1000);
 const evalJs = async expr => (await send("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true })).result?.value;
 const state = await evalJs(`({ calls: window.__pk.calls.slice(), canvases: document.querySelectorAll("canvas").length,
   appReady: !!window.application })`);
-// trigger the CTA path directly
-await evalJs(`try { window.application && window.application.clickInstall(); "ok" } catch (e) { String(e) }`);
+// trigger the CTA the way the playable would: its own hook if we know it, otherwise MRAID
+const ctaPath = await evalJs(`(() => {
+  try {
+    if (window.application && typeof window.application.clickInstall === "function") { window.application.clickInstall(); return "application.clickInstall"; }
+    if (window.mraid && typeof window.mraid.open === "function") { window.mraid.open("https://example.com/smoke-test"); return "mraid.open"; }
+    return "no CTA hook found";
+  } catch (e) { return "error: " + e.message; }
+})()`);
 await sleep(300);
 const afterCta = await evalJs("window.__pk.calls.slice()");
 if (shotPath) {
@@ -103,4 +109,4 @@ if (network === "mintegral") {
 }
 ws.close(); cleanup();
 const ok = checks.every(c => c.pass);
-out({ ok, command: "smoke", file: path.resolve(input), network, checks, screenshot: shotPath ? path.resolve(shotPath) : null }, ok ? 0 : 3);
+out({ ok, command: "smoke", file: path.resolve(input), network, ctaPath, checks, screenshot: shotPath ? path.resolve(shotPath) : null }, ok ? 0 : 3);

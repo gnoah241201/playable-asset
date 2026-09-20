@@ -199,3 +199,38 @@ def test_real_build_smoke_mintegral(tmp_path, capsys):
     if not r["ok"] and r.get("error", {}).get("code") == "smoke_unavailable":
         pytest.skip(r["error"]["message"])
     assert code == 0 and r["ok"], r
+
+
+def test_analytics_state_detection(sample, tmp_path):
+    from playable_kit.core import _analytics_state
+    path, _ = sample
+    base = path.read_text(encoding="utf-8")
+    assert _analytics_state(base) == "stripped"
+    assert _analytics_state("<html><body>hi</body></html>") == "none"
+    sending = 'class A{constructor(){this.playableId="X"}send(t){const{path:e}=this;fetch(e,{method:"POST"})}}'
+    assert _analytics_state(sending) == "active"
+    gated = ('<script>window.applicationSettings={adNetwork:"applovin",analytics:!1}</script>'
+             'class A{constructor(){this.playableId="X"}send(t){if(window.applicationSettings.analytics){'
+             'const{path:e}=this;fetch(e,{method:"POST"})}}}')
+    assert _analytics_state(gated) == "gated-off"
+
+
+def test_generic_mraid_build_converts_with_shim(tmp_path):
+    """A playable from an unknown engine still converts: we shim MRAID instead of rewriting it."""
+    html = ('<html><head><title>Other engine</title></head><body><canvas></canvas>'
+            '<script>var link="https://play.google.com/store/apps/details?id=com.other.game";'
+            'document.body.onclick=function(){mraid.open(link)};</script></body></html>')
+    src = tmp_path / "other.html"
+    src.write_text(html, encoding="utf-8")
+    r = pk.inspect(str(src))
+    assert r["store_links"]["android"].endswith("com.other.game")
+    out = pk.convert(str(src), "mintegral", str(tmp_path / "other.zip"))["path"]
+    v = pk.validate(out, "mintegral")
+    assert v["ok"], v["checks"]
+
+
+def test_non_mraid_build_is_rejected(tmp_path):
+    src = tmp_path / "plain.html"
+    src.write_text("<html><body>just a page</body></html>", encoding="utf-8")
+    with pytest.raises(pk.ConversionError):
+        pk.convert(str(src), "mintegral", str(tmp_path / "plain.zip"))

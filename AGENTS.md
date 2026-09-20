@@ -46,12 +46,14 @@ To convert without changing assets: `playable-kit --json convert build.html --to
 ```json
 {"ok":true,"command":"inspect","file":"...","bytes":2398947,"ad_network":"applovin",
  "store_links":{"ios":"https://apps.apple.com/...","android":"https://play.google.com/..."},
- "analytics_enabled":false,"external_urls":[],"supported":true,
+ "analytics_enabled":false,"analytics":"gated-off","external_urls":[],"supported":true,
  "asset_modules":{"images":23,"sounds":11,"spritesheets":8},
  "spritesheets":{"items":118,"ui":7}}
 ```
-`supported:false` comes with `unsupported_reason:{code,message}`. `analytics_enabled:true` means the build's
-analytics `send()` has a body and may send data. Surface that to the user.
+`supported:false` comes with `unsupported_reason:{code,message}`. `analytics` is one of `none`, `stripped`
+(the `send()` body is empty), `gated-off` (analytics code is present but `applicationSettings.analytics` is
+false, so nothing is sent) or `active` (it can reach the network); `analytics_enabled` is the boolean form.
+Surface `active` to the user before they ship the build.
 
 ### `unpack FILE -o WORKSPACE [--force]`
 Returns `{workspace, template, config, assets, spritesheets, frames, files:[...]}`. `files` lists every editable

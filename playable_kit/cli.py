@@ -20,7 +20,7 @@ def _human(cmd, r):
         print(f"supported      : {r['supported']}")
         print(f"ad network     : {r['ad_network']}")
         print(f"store links    : {r['store_links']}")
-        print(f"analytics      : {'ENABLED' if r['analytics_enabled'] else 'off/none'}")
+        print(f"analytics      : {r['analytics']}")
         if r.get("supported"):
             print(f"asset modules  : {r['asset_modules']}")
             print(f"spritesheets   : {r['spritesheets']}")

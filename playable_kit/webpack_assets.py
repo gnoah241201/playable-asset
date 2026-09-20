@@ -12,9 +12,13 @@ from dataclasses import dataclass
 
 from .errors import UnsupportedBuildError
 
-CTX_RE = re.compile(r'(\d+)\(\w+,\w+,\w+\)\{const \w+=(\{"\./[^{}]*\})')
+# Two webpack output shapes are supported:
+#   old: 2853(A,I,i){const j={"./x.png":100}}    and  100(A){"use strict";A.exports="data:..."}
+#   new: 2853:(M,L,j)=>{var w={"./x.png":100}}   and  100:M=>{"use strict";M.exports="data:..."}
+CTX_RE = re.compile(r'(\d+)\s*:?\s*\(\w+,\s*\w+,\s*\w+\)\s*(?:=>)?\s*\{\s*(?:const|var|let)\s+\w+\s*=\s*(\{"\./[^{}]*\})')
 IMPORT_RE = re.compile(r'importAll\(\w+\((\d+)\),\s*\w+\.ASSETS_TYPES\.(\w+)\)')
-MODULE_RE = re.compile(r'(\d+)\((\w+)\)\{"use strict";\2\.exports="(data:([^;"]+);base64,([A-Za-z0-9+/=]*))"\}')
+MODULE_RE = re.compile(r'(\d+)\s*:?\s*\(?(\w+)\)?\s*(?:=>)?\s*\{"use strict";\2\.exports='
+                       r'"(data:([^;"]+);base64,([A-Za-z0-9+/=]*))"\}')
 ENTRY_RE = re.compile(r'"\./([^"]+)":(\d+)')
 
 

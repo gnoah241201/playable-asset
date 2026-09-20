@@ -70,12 +70,42 @@ def _pair_sheets(modules):
     return pairs
 
 
-def _analytics_enabled(html):
-    m = re.search(r'playableId="[^"]*"[^{}]*\}send\(\w*\)\{([^}]*)\}', html)
+def _send_body(html):
+    """Body of the analytics send() method, located by brace matching."""
+    m = re.search(r'playableId\s*=\s*"[^"]*"[\s\S]{0,400}?send\(\w*\)\{', html)
     if not m:
         return None
-    body = m.group(1).strip()
-    return not (body == "" or re.fullmatch(r"/\*.*?\*/", body, re.S))
+    start = m.end()
+    depth = 1
+    for i in range(start, len(html)):
+        c = html[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return html[start:i]
+    return None
+
+
+def _analytics_state(html):
+    """none | stripped | gated-off (present but disabled by a flag) | active"""
+    body = _send_body(html)
+    if body is None:
+        return "none"
+    body = body.strip()
+    if not body or re.fullmatch(r"(/\*.*?\*/|//[^\n]*)", body, re.S):
+        return "stripped"
+    if not re.search(r"fetch\(|sendBeacon|XMLHttpRequest|WebSocket", body):
+        return "stripped"
+    gated = re.search(r"if\s*\(\s*window\.applicationSettings\.analytics\s*\)", body)
+    flag_off = re.search(r"window\.applicationSettings\s*=\s*\{[^}]*analytics\s*:\s*(!1|false)", html)
+    return "gated-off" if gated and flag_off else "active"
+
+
+def _analytics_enabled(html):
+    state = _analytics_state(html)
+    return None if state == "none" else state == "active"
 
 
 def _external_urls(html):
@@ -91,7 +121,8 @@ def inspect(html_path):
     html, zip_files = _read_html_any(html_path)
     result = {"file": os.path.abspath(html_path), "bytes": os.path.getsize(html_path),
               "ad_network": networks.detect_network(html), "store_links": networks.get_store_links(html),
-              "analytics_enabled": _analytics_enabled(html), "external_urls": _external_urls(html)}
+              "analytics_enabled": _analytics_enabled(html), "analytics": _analytics_state(html),
+              "external_urls": _external_urls(html)}
     if zip_files is not None:
         result["zip_files"] = zip_files
     try:
@@ -336,15 +367,18 @@ def validate(path, network=None):
     check("no_external_urls", not external,
           "No URLs besides store links" if not external else f"{len(external)} external URL(s) found; review them",
           level="warn")
-    analytics = _analytics_enabled(html)
-    check("analytics_disabled", analytics is not True,
-          {True: "Analytics send() has a body - data may be sent", False: "Analytics send() is a no-op",
-           None: "No analytics module detected"}[analytics], level="warn")
+    analytics = _analytics_state(html)
+    check("analytics_disabled", analytics != "active",
+          {"active": "Analytics send() can reach the network",
+           "gated-off": "Analytics present but disabled by applicationSettings.analytics=false",
+           "stripped": "Analytics send() is a no-op",
+           "none": "No analytics module detected"}[analytics], level="warn")
     try:
         find_asset_modules(html)
         check("assets_inline", True, "All asset modules are inlined")
     except UnsupportedBuildError as e:
-        check("assets_inline", False, e.message)
+        # unknown bundler: the build can still ship, it just cannot be re-skinned by this kit
+        check("assets_inline", False, f"Asset editing unavailable: {e.message}", level="warn")
 
     if network == "mintegral":
         if zip_files is not None:
@@ -361,8 +395,10 @@ def validate(path, network=None):
               else "SDK bridge matches the game engine")
         check("defines_gameStart", re.search(r"window\.gameStart\s*=", html) is not None, "window.gameStart is defined")
         check("defines_gameClose", re.search(r"window\.gameClose\s*=", html) is not None, "window.gameClose is defined")
-        check("no_mraid_open", "mraid.open" not in html and "window.open(" not in html,
-              "No mraid.open / window.open in the bootstrap")
+        shimmed = "mtg:start" in html
+        check("no_mraid_open", shimmed or ("mraid.open" not in html and "window.open(" not in html),
+              "MRAID calls are shimmed to the Mintegral SDK" if shimmed
+              else "No mraid.open / window.open in the bootstrap")
     elif network in ("applovin", "mraid"):
         check("mraid_bootstrap", bool(networks.BOOTSTRAP_RE.search(html)) and "mraid.open" in html,
               "MRAID bootstrap with mraid.open CTA")
